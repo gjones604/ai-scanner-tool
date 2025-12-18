@@ -15,7 +15,6 @@ interface Settings {
     detectionEndpoint: string
     showCrawlingLines: boolean
     enableSummarization: boolean
-    summarizationProvider: 'lmstudio' | 'ollama'
     summarizationEndpoint: string
     summarizationModel: string
     minSummaryChars: number
@@ -23,7 +22,7 @@ interface Settings {
     saveScannedImages: boolean
     enableDeepAnalysis: boolean
     deepAnalysisThreshold: number
-    objectThresholds: Record<string, number>
+    categoryThresholds: Record<string, number>
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -31,23 +30,24 @@ const DEFAULT_SETTINGS: Settings = {
     detectionEndpoint: 'http://localhost:8001/api/detect-base64',
     showCrawlingLines: true,
     enableSummarization: true,
-    summarizationProvider: 'lmstudio',
-    summarizationEndpoint: 'http://127.0.0.1:1234/v1/chat/completions',
-    summarizationModel: 'ibm/granite-4-h-tiny',
+    summarizationEndpoint: 'http://localhost:8001/api/summarize',
+    summarizationModel: 'ibm-granite/granite-4.0-h-tiny',
     minSummaryChars: 40,
     toggleActivation: false,
     saveScannedImages: false,
     enableDeepAnalysis: false,
     deepAnalysisThreshold: 0.85,
-    objectThresholds: {
-        "person": 0.85,
-        "car": 0.50,
-        "truck": 0.50,
-        "motorcycle": 0.50,
-        "dog": 0.50,
-        "cat": 0.50,
-        "bird": 0.50,
-        "text": 0.50
+    categoryThresholds: {
+        "Humans": 0.85,
+        "Vehicles": 0.85,
+        "Animals": 0.85,
+        "Outdoors": 0.55,
+        "Accessories": 0.85,
+        "Sports": 0.85,
+        "Household": 0.85,
+        "Food": 0.85,
+        "Electronics": 0.85,
+        "Misc": 0.85
     }
 }
 
@@ -55,7 +55,6 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
     const [isActive, setIsActive] = useState(false)
     const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
     const summarySettings: SummarySettings = {
-        provider: settings.summarizationProvider,
         endpoint: settings.summarizationEndpoint,
         model: settings.summarizationModel,
         minChars: settings.minSummaryChars,
@@ -66,7 +65,7 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
         settings.saveScannedImages,
         settings.enableDeepAnalysis,
         settings.deepAnalysisThreshold,
-        settings.objectThresholds,
+        settings.categoryThresholds,
         summarySettings
     )
 
@@ -319,8 +318,8 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
                                         top: y,
                                         width: w,
                                         height: h,
-                                        border: '2px solid #4ade80',
-                                        backgroundColor: 'rgba(74, 222, 128, 0.15)',
+                                        border: `2px solid ${det.color}`,
+                                        backgroundColor: `${det.color}26`, // 15% opacity
                                     }}
                                 >
                                     {/* Small type tag for the box itself */}
@@ -328,12 +327,12 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
                                         className="absolute -top-5 left-0 text-[10px] px-2 py-0.5 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap"
                                         style={{
                                             backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                                            color: '#4ade80',
-                                            border: '1px solid rgba(74, 222, 128, 0.4)'
+                                            color: det.color,
+                                            border: `1px solid ${det.color}66`
                                         }}
                                     >
                                         <Target className="w-2.5 h-2.5" />
-                                        {det.type}
+                                        {det.type} {(det.confidence * 100).toFixed(0)}%
                                     </div>
                                 </div>
                             )
@@ -423,7 +422,6 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
                     isSummarizing={isSummarizing}
                     error={summaryError}
                     mousePos={mousePos}
-                    provider={settings.summarizationProvider}
                 />
             )}
 

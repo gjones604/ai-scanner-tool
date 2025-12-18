@@ -7,7 +7,7 @@ export function useScanner(
     saveScannedImages: boolean = false,
     enableDeepAnalysis: boolean = false,
     deepAnalysisThreshold: number = 0.85,
-    objectThresholds: Record<string, number> = {},
+    categoryThresholds: Record<string, number> = {},
     summarySettings?: SummarySettings
 ) {
     const [hoveredImage, setHoveredImage] = useState<HTMLImageElement | null>(null)
@@ -38,13 +38,26 @@ export function useScanner(
     const triggerDeepAnalysis = useCallback(async (result: DetectionResult) => {
         if (!result.image) return
 
-        // Use per-object thresholds if available
+        // Use per-category thresholds if available
         const targets = result.data.filter(d => {
-            const threshold = objectThresholds[d.type] ?? deepAnalysisThreshold
-            const isAnalyzable = ['person', 'dog', 'cat', 'car', 'truck', 'motorcycle'].includes(d.type)
-            return isAnalyzable && d.confidence >= threshold && !d.analysis
+            const category = (d as any).category || "Misc"
+            const threshold = categoryThresholds[category] ?? deepAnalysisThreshold
+            const isAnalyzable = (d as any).is_analyzable
+            const meetThreshold = d.confidence >= threshold
+
+            if (isAnalyzable && !d.analysis) {
+                console.log(`[Scanner] Checking ${d.type} (${category}): conf=${d.confidence}, threshold=${threshold}, meet=${meetThreshold}`)
+            }
+
+            return isAnalyzable && meetThreshold && !d.analysis
         })
-        if (targets.length === 0) return
+
+        if (targets.length === 0) {
+            console.log(`[Scanner] No targets found for deep analysis. Total objects: ${result.data.length}`)
+            return
+        }
+
+        console.log(`[Scanner] Triggering deep analysis for ${targets.length} objects`)
 
         // Use a stable key
         const analyzeKey = `${result.image.substring(0, 50)}_${targets.length}`
@@ -57,8 +70,9 @@ export function useScanner(
             return {
                 ...prev,
                 data: prev.data.map(d => {
-                    const threshold = objectThresholds[d.type] ?? deepAnalysisThreshold
-                    const isAnalyzable = ['person', 'dog', 'cat', 'car', 'truck', 'motorcycle'].includes(d.type)
+                    const category = (d as any).category || "Misc"
+                    const threshold = categoryThresholds[category] ?? deepAnalysisThreshold
+                    const isAnalyzable = (d as any).is_analyzable
                     return (isAnalyzable && d.confidence >= threshold && !d.analysis) ? { ...d, analysis: '...' } : d
                 })
             }
@@ -135,7 +149,7 @@ export function useScanner(
                 analyzingRef.current.delete(analyzeKey)
             }, 1000)
         }
-    }, [deepAnalysisThreshold, objectThresholds, summarySettings])
+    }, [deepAnalysisThreshold, categoryThresholds, summarySettings])
 
     useEffect(() => {
         if (!isActive) {
@@ -162,8 +176,9 @@ export function useScanner(
                         // If cached has no analysis but deep analysis is now enabled, we might want to re-trigger?
                         // For now, let's just use cache as is.
                         const hasAnalysisPending = cached.data.some(d => {
-                            const threshold = objectThresholds[d.type] ?? deepAnalysisThreshold
-                            const isAnalyzable = ['person', 'dog', 'cat', 'car', 'truck', 'motorcycle'].includes(d.type)
+                            const category = (d as any).category || "Misc"
+                            const threshold = categoryThresholds[category] ?? deepAnalysisThreshold
+                            const isAnalyzable = (d as any).is_analyzable
                             return isAnalyzable && d.confidence >= threshold && !d.analysis
                         })
 
@@ -193,7 +208,7 @@ export function useScanner(
 
         window.addEventListener('mousemove', handleMouseMove)
         return () => window.removeEventListener('mousemove', handleMouseMove)
-    }, [isActive, hoveredImage, findImageUnderCursor])
+    }, [isActive, hoveredImage, findImageUnderCursor, categoryThresholds, deepAnalysisThreshold, enableDeepAnalysis, saveScannedImages])
 
     return {
         hoveredImage,

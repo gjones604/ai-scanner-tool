@@ -8,7 +8,6 @@ interface Settings {
   detectionEndpoint: string;
   showCrawlingLines: boolean;
   enableSummarization: boolean;
-  summarizationProvider: string;
   summarizationEndpoint: string;
   summarizationModel: string;
   minSummaryChars: number;
@@ -16,7 +15,7 @@ interface Settings {
   saveScannedImages: boolean;
   enableDeepAnalysis: boolean;
   deepAnalysisThreshold: number;
-  objectThresholds: Record<string, number>;
+  categoryThresholds: Record<string, number>;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -24,23 +23,24 @@ const DEFAULT_SETTINGS: Settings = {
   detectionEndpoint: "http://localhost:8001/api/detect-base64",
   showCrawlingLines: true,
   enableSummarization: true,
-  summarizationProvider: "lmstudio",
-  summarizationEndpoint: "http://127.0.0.1:1234/v1/chat/completions",
-  summarizationModel: "ibm/granite-4-h-tiny",
+  summarizationEndpoint: "http://localhost:8001/api/summarize",
+  summarizationModel: "ibm-granite/granite-4.0-h-tiny",
   minSummaryChars: 40,
   toggleActivation: false,
   saveScannedImages: false,
   enableDeepAnalysis: false,
   deepAnalysisThreshold: 0.85,
-  objectThresholds: {
-    "person": 0.85,
-    "car": 0.50,
-    "truck": 0.50,
-    "motorcycle": 0.50,
-    "dog": 0.50,
-    "cat": 0.50,
-    "bird": 0.50,
-    "text": 0.50
+  categoryThresholds: {
+    "Humans": 0.85,
+    "Vehicles": 0.50,
+    "Animals": 0.50,
+    "Outdoors": 0.50,
+    "Accessories": 0.50,
+    "Sports": 0.50,
+    "Household": 0.50,
+    "Food": 0.50,
+    "Electronics": 0.50,
+    "Misc": 0.50
   }
 };
 
@@ -249,11 +249,11 @@ function App() {
           </div>
         )}
 
-        {/* Object Thresholds List */}
+        {/* Category Thresholds List */}
         <div className="theme-setting">
-          <label className="theme-label" style={{ marginBottom: '4px', display: 'block' }}>VLM Analysis Thresholds (per object):</label>
+          <label className="theme-label" style={{ marginBottom: '4px', display: 'block' }}>VLM Analysis Thresholds (per category):</label>
           <p style={{ fontSize: '10px', color: '#666', marginBottom: '10px', lineHeight: '1.2' }}>
-            YOLO detections are always visible. Adjust these to control when Florence-2 analysis is triggered.
+            YOLO detections are always visible. Adjust these to control when Florence-2 analysis is triggered for entire categories.
           </p>
           <div style={{
             display: 'grid',
@@ -264,9 +264,9 @@ function App() {
             borderRadius: '4px',
             border: '1px solid #ddd'
           }}>
-            {Object.entries(settings.objectThresholds).map(([obj, val]) => (
-              <div key={obj} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold' }}>{obj}</span>
+            {Object.entries(settings.categoryThresholds).map(([cat, val]) => (
+              <div key={cat} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold' }}>{cat}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <input
                     type="range"
@@ -275,8 +275,8 @@ function App() {
                     step="0.05"
                     value={val}
                     onChange={(e) => {
-                      const newThresholds = { ...settings.objectThresholds, [obj]: parseFloat(e.target.value) };
-                      handleChange('objectThresholds', newThresholds);
+                      const newThresholds = { ...settings.categoryThresholds, [cat]: parseFloat(e.target.value) };
+                      handleChange('categoryThresholds', newThresholds);
                     }}
                     style={{ flex: 1 }}
                   />
@@ -302,19 +302,7 @@ function App() {
         {settings.enableSummarization && (
           <div className="theme-content" style={{ paddingLeft: '10px', borderLeft: '2px solid #ddd' }}>
             <div className="theme-setting">
-              <label className="theme-label">Provider:</label>
-              <select
-                className="theme-select"
-                value={settings.summarizationProvider}
-                onChange={(e) => handleChange('summarizationProvider', e.target.value)}
-              >
-                <option value="lmstudio">LM Studio (OpenAI compatible)</option>
-                <option value="ollama">Ollama (local API)</option>
-              </select>
-            </div>
-
-            <div className="theme-setting">
-              <label className="theme-label">Summarization API URL:</label>
+              <label className="theme-label">Local Summarization API URL:</label>
               <input
                 type="text"
                 className="theme-input"

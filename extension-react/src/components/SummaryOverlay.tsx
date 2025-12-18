@@ -10,7 +10,6 @@ interface SummaryOverlayProps {
     isSummarizing: boolean
     error: string
     mousePos: { x: number; y: number }
-    provider: string
 }
 
 const SummaryOverlay: React.FC<SummaryOverlayProps> = ({
@@ -19,7 +18,6 @@ const SummaryOverlay: React.FC<SummaryOverlayProps> = ({
     isSummarizing,
     error,
     mousePos,
-    provider,
 }) => {
     const [position, setPosition] = useState({ left: 0, top: 0 })
 
@@ -117,7 +115,7 @@ const SummaryOverlay: React.FC<SummaryOverlayProps> = ({
                             {summaryResult?.model && (
                                 <div className="flex items-center gap-2 pt-2 border-t border-cyan-500/20">
                                     <div className="flex-1 text-[10px] uppercase tracking-widest text-slate-500 font-mono">
-                                        {provider} · {summaryResult.model}
+                                        Local · {summaryResult.model}
                                     </div>
                                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.8)]" />
                                 </div>
