@@ -21,8 +21,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi import Request
 from ultralytics import YOLO
-from transformers import AutoProcessor, AutoModelForCausalLM
+from transformers import AutoProcessor, AutoModelForCausalLM, AutoTokenizer
 import uvicorn
+from object_config import OBJECT_CONFIG
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,35 +32,69 @@ logger = logging.getLogger(__name__)
 yolo_model = None
 florence_model = None
 florence_processor = None
+summarizer_model = None
+summarizer_tokenizer = None
+current_summarize_id = 0  # To track and cancel old summarization requests
 device = "cuda" if torch.cuda.is_available() else "cpu"
-# Set torch_dtype based on device availability
-torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+# Set dtype based on device availability
+dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-logger.info(f"Using device: {device} with dtype: {torch_dtype}")
+logger.info(f"Using device: {device} with dtype: {dtype}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    global yolo_model, florence_model, florence_processor
+    global yolo_model, florence_model, florence_processor, summarizer_model, summarizer_tokenizer
     try:
+        # Load YOLO first and be EXPLICIT about the device to avoid CPU fallback
         logger.info("Loading YOLO11x model...")
         yolo_model = YOLO('yolo11x.pt')
-        logger.info("YOLO11x model loaded successfully")
+        yolo_model.to(device)
+        logger.info(f"YOLO11x model loaded successfully on {device}")
 
+        # Load Granite 3.1 2B instead of 4.0 Tiny. 
+        # 3.1 is a pure transformer, much faster on Windows, and uses less VRAM.
+        logger.info("Loading Granite-3.1-2b-instruct with 4-bit quantization...")
+        summarizer_model_id = 'ibm-granite/granite-3.1-2b-instruct'
+        from transformers import BitsAndBytesConfig
+        
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+        )
+
+        summarizer_tokenizer = AutoTokenizer.from_pretrained(summarizer_model_id)
+        summarizer_model = AutoModelForCausalLM.from_pretrained(
+            summarizer_model_id,
+            trust_remote_code=True,
+            quantization_config=bnb_config,
+            device_map="auto"
+        )
+        logger.info("Granite-3.1-2b-instruct loaded successfully")
+
+        # Load Florence-2 last as it's the largest single-block model
         logger.info("Loading Florence-2-large model...")
-        model_id = 'microsoft/Florence-2-large'
+        florence_model_id = 'microsoft/Florence-2-large'
         florence_model = AutoModelForCausalLM.from_pretrained(
-            model_id, 
+            florence_model_id, 
             trust_remote_code=True,
             attn_implementation="eager",
-            torch_dtype=torch_dtype
+            dtype=dtype
         ).to(device).eval()
-        florence_processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+        florence_processor = AutoProcessor.from_pretrained(florence_model_id, trust_remote_code=True)
         logger.info("Florence-2 model loaded successfully")
+        
         yield
     except Exception as e:
         logger.error(f"Failed to load models: {e}")
-        raise
+        # If Granite fails, we can still run YOLO and Florence
+        if yolo_model and florence_model:
+            logger.warning("Continuing without summarization model")
+            yield
+        else:
+            raise
     # Shutdown
     logger.info("Shutting down Ultralytics server")
 
@@ -98,11 +133,17 @@ async def get_status():
         "status": "ready",
         "models": {
             "yolo": "YOLO11x",
-            "vlm": "Florence-2-large" if florence_model else "none"
+            "vlm": "Florence-2-large" if florence_model else "none",
+            "summarizer": "Granite-3.1-2b-instruct" if summarizer_model else "none"
         },
         "device": device,
-        "message": "Ultralytics YOLO and Florence-2 service ready"
+        "message": "Ultralytics YOLO, Florence-2, and Granite service ready"
     }
+
+@app.get("/api/config/objects")
+async def get_object_config():
+    """Get the full object configuration for the frontend"""
+    return OBJECT_CONFIG
 
 @app.post("/api/save-image")
 async def save_image(request: Dict[str, Any]):
@@ -399,17 +440,17 @@ async def analyze_box(request: Dict[str, Any]):
         
         # Determine the best prompt based on object type
         obj_type = request.get("type", "person")
+        logger.info(f"Analyzing box: type={obj_type}, size={int(w)}x{int(h)}")
         
-        # Mapping for targeted questions as requested
-        prompts = {
-            "person": ("<DETAILED_CAPTION>", " Identify this person."),
-            "dog": ("<VQA>", "What breed is this dog?"),
-            "cat": ("<VQA>", "What breed is this cat?"),
-            "car": ("<VQA>", "What is the make and model of this car?"),
-            "motorcycle": ("<VQA>", "What make and model is this motorcycle?")
-        }
+        # Mapping for targeted questions from centralized config
+        config = OBJECT_CONFIG.get(obj_type, {
+            "task": "<DETAILED_CAPTION>",
+            "prompt": "",
+            "llm_query": f"Analyze object: {obj_type}."
+        })
         
-        task, hint = prompts.get(obj_type, ("<DETAILED_CAPTION>", ""))
+        task = config["task"]
+        hint = config["prompt"]
         
         # CRITICAL: For <DETAILED_CAPTION>, the token MUST be the only text.
         # Otherwise the processor fails.
@@ -435,6 +476,62 @@ async def analyze_box(request: Dict[str, Any]):
     except Exception as e:
         logger.error(f"Crop analysis failed: {e}")
         return {"analysis": f"Error: {str(e)[:50]}"}
+
+@app.post("/api/summarize")
+async def summarize_text(request: Dict[str, Any]):
+    """
+    Summarize text using Granite-4.0-h-tiny
+    """
+    global summarizer_model, summarizer_tokenizer, current_summarize_id
+    
+    if summarizer_model is None:
+        raise HTTPException(status_code=503, detail="Summarization model not loaded")
+
+    try:
+        text = request.get("text")
+        if not text:
+            raise HTTPException(status_code=400, detail="No text provided")
+
+        # Increment request ID to signal old requests to stop
+        current_id = current_summarize_id + 1
+        current_summarize_id = current_id
+
+        # Prepare prompt for summarization
+        # Granite 3.1 Instruct works best with a clear instruction format
+        prompt = f"<|system|>\nWrite concise, user-friendly summaries for website text. Always start with 1 to 5 emojis that best represent the text as a visual micro sentiment analysis without using words. Next add a new line with separator ------ then the actual summary of the user provided text. Keep summary very short around 30 to 75 words max.<|user|>\n{text}\n<|assistant|>\n"
+        
+        inputs = summarizer_tokenizer(prompt, return_tensors="pt").to(summarizer_model.device)
+        
+        # Define stopping criteria to check for cancellation
+        from transformers import StoppingCriteria, StoppingCriteriaList
+        
+        class CancelCriteria(StoppingCriteria):
+            def __init__(self, target_id):
+                self.target_id = target_id
+            def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+                # If a new request has started, stop this one
+                return current_summarize_id != self.target_id
+
+        with torch.no_grad():
+            output_ids = summarizer_model.generate(
+                **inputs,
+                max_new_tokens=256,
+                do_sample=False,  # Greedy search for maximum speed
+                num_beams=1,
+                stopping_criteria=StoppingCriteriaList([CancelCriteria(current_id)])
+            )
+        
+        # Check if we were cancelled
+        if current_summarize_id != current_id:
+            logger.info(f"Summarization request {current_id} cancelled")
+            return {"summary": "[Request cancelled by a newer one]", "cancelled": True}
+            
+        summary = summarizer_tokenizer.decode(output_ids[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
+        return {"summary": summary.strip()}
+
+    except Exception as e:
+        logger.error(f"Summarization failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Summarization failed: {str(e)}")
 
 @app.get("/api/images")
 async def list_images():
@@ -518,9 +615,14 @@ async def process_detections(image, results, deep_analysis=False):
                 class_name = yolo_model.names[class_id]
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
 
+                # Get config for this class
+                config = OBJECT_CONFIG.get(class_name, {})
+                color = config.get("color", "#00FF00")
+                is_analyzable = config.get("is_analyzable", False)
+
                 analysis_text = ""
                 # Only attempt analysis if confidence is high (e.g., > 85%) as requested
-                if deep_analysis and class_name == "person" and confidence > 0.85:
+                if deep_analysis and is_analyzable and confidence > 0.85:
                     try:
                         pad = 40
                         cx1 = max(0, int(x1) - pad)
@@ -553,6 +655,9 @@ async def process_detections(image, results, deep_analysis=False):
                     "class": class_name,
                     "confidence": float(round(confidence, 3)),
                     "analysis": analysis_text,
+                    "color": color, 
+                    "is_analyzable": is_analyzable,
+                    "category": config.get("category", "Misc"),
                     "bbox": {
                         "x1": float(round((x1 / img_width) * 100, 2)),
                         "y1": float(round((y1 / img_height) * 100, 2)),
@@ -562,26 +667,18 @@ async def process_detections(image, results, deep_analysis=False):
                 })
     
     response_data = []
-    color_map = {
-        "person": "#00FF00", "car": "#FF6B00", "truck": "#FF6B00", "bus": "#FF6B00",
-        "dog": "#FF00FF", "cat": "#FF00FF", "bird": "#00FFFF", "horse": "#800080",
-        "sheep": "#800080", "cow": "#800080", "elephant": "#800080", "bear": "#800080",
-        "zebra": "#800080", "giraffe": "#800080", "backpack": "#FFFF00", "handbag": "#FFFF00",
-        "suitcase": "#FFFF00", "bottle": "#FF0000", "cup": "#FF0000", "chair": "#8B4513",
-        "sofa": "#8B4513", "bed": "#8B4513", "dining table": "#8B4513", "text": "#0080FF",
-    }
-    
     for det in detections:
-        color = color_map.get(det["class"], "#00FF00")
         response_data.append({
             "x": float(det["bbox"]["x1"]),
             "y": float(det["bbox"]["y1"]),
             "width": float(det["bbox"]["x2"] - det["bbox"]["x1"]),
             "height": float(det["bbox"]["y2"] - det["bbox"]["y1"]),
-            "color": color,
+            "color": det["color"],
             "type": det["class"],
             "analysis": det["analysis"],
-            "confidence": float(det["confidence"])
+            "confidence": float(det["confidence"]),
+            "is_analyzable": det.get("is_analyzable", False),
+            "category": det.get("category", "Misc")
         })
     return response_data
 
@@ -619,7 +716,7 @@ async def run_florence_analysis(image, task_prompt, text_input=None):
                 return {task_prompt: "Error: Processor returned nothing"}
             
             # Move all tensors to the device robustly using the correct dtype
-            inputs = inputs.to(device, torch_dtype)
+            inputs = inputs.to(device, dtype)
             
             # Log processed inputs
             logger.info(f"Florence processed inputs keys: {list(inputs.keys())}")

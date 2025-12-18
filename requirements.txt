@@ -1,4 +1,5 @@
 fastapi>=0.104.1
+requests
 numpy
 opencv-python>=4.8.1.78
 pillow>=10.1.0

@@ -35,7 +35,7 @@ A browser extension and React web application that uses Ultralytics YOLO for rea
 1. **Start the YOLO Server**:
 
    ```bash
-   python server.py
+   py -3.12 server.py
    ```
 
    Server will run on `http://localhost:8001`
