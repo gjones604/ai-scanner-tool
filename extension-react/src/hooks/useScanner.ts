@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { imageScanner, type DetectionResult } from '../services/imageScanner'
-import { type SummarySettings, textSummarizer } from '../services/textSummarizer'
+import { type SummarySettings, /*textSummarizer*/ } from '../services/textSummarizer'
 
 export function useScanner(
     isActive: boolean,
@@ -94,43 +94,27 @@ export function useScanner(
 
                 let finalAnalysis = visionResult
 
-                // Step 2: If we have LLM settings, refine the output (The "Brain" step)
-                if (summarySettings && visionResult && !visionResult.startsWith('Error')) {
+                /*
+                // Step 2: Use the unified summarizer to refine the output (The "Brain" step)
+                if (visionResult && !visionResult.startsWith('Error')) {
                     try {
-                        const targetQuestions: Record<string, string> = {
-                            "person": "Who is the person in this image? Reply only with their name or alias if any or simply describe their appearance without identifying them.",
-                            "dog": "What breed of dog is this?",
-                            "cat": "Which breed of cat is this?",
-                            "car": "Identify manufacturer and model of this car.",
-                            "truck": "Identify manufacturer and model of this truck.",
-                            "motorcycle": "Query vehicle: Identify manufacturer and model."
-                        }
-
-                        const query = targetQuestions[target.type] || `Analyze object: ${target.type}.`
-
-                        const identifySystemPrompt =
-                            "You are a futuristic bio-mechanical scanner OS. Your task is to provide immediate, high-certainty identification based on raw vision data. " +
-                            "Output must be direct, cold, and factual. No greetings, no preamble, no fluff. " +
-                            "If a name is present in the data, lead with it. If not, describe identifying features. " +
-                            "Maximum length: 25 words."
-
                         const refinedResult = await textSummarizer.summarize(
-                            `SOURCE VISION DATA: ${visionResult}\nUSER QUERY: ${query}`,
+                            visionResult,
                             {
                                 ...summarySettings,
-                                systemPrompt: identifySystemPrompt,
-                                minChars: 1
-                            }
+                                mode: 'refine',
+                                category: (target as any).category || 'Misc'
+                            } as any
                         )
 
                         if (refinedResult?.summary) {
                             finalAnalysis = refinedResult.summary
                         }
                     } catch (err) {
-                        console.error("LLM Refinement failed", err)
-                        // Fall back to raw Florence result
+                        console.error("Refinement failed", err)
                     }
                 }
+                */
 
                 setDetectionResult(prev => {
                     if (!prev) return prev

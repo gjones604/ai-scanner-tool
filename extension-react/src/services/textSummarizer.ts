@@ -107,7 +107,7 @@ class TextSummarizer {
 
             const result: SummaryResult = {
                 summary: summaryText,
-                model: settings.model || 'Granite-4.0-h-tiny',
+                model: settings.model || 'Qwen2.5-0.5B-Instruct',
             }
 
             // Cache result

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Brain, X, Target } from 'lucide-react'
+import { Brain, X, Target, Loader2 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 import { useScanner } from '../hooks/useScanner'
 import { useTextSummarization } from '../hooks/useTextSummarization'
@@ -31,7 +32,7 @@ const DEFAULT_SETTINGS: Settings = {
     showCrawlingLines: true,
     enableSummarization: true,
     summarizationEndpoint: 'http://localhost:8001/api/summarize',
-    summarizationModel: 'ibm-granite/granite-4.0-h-tiny',
+    summarizationModel: 'Qwen/Qwen2.5-0.5B-Instruct',
     minSummaryChars: 40,
     toggleActivation: false,
     saveScannedImages: false,
@@ -85,6 +86,12 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
                     if (typeof mergedSettings.minSummaryChars !== 'number') {
                         mergedSettings.minSummaryChars = DEFAULT_SETTINGS.minSummaryChars
                     }
+
+                    // Auto-migrate from Granite to Qwen if old model is detected
+                    if (mergedSettings.summarizationModel.toLowerCase().includes('granite')) {
+                        mergedSettings.summarizationModel = DEFAULT_SETTINGS.summarizationModel;
+                    }
+
                     setSettings(mergedSettings as Settings)
                     callback?.()
                 })
@@ -291,14 +298,24 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
                         {/* Status label */}
                         <div className="absolute -bottom-7 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
                             <div
-                                className="text-[10px] uppercase tracking-widest px-2 py-1 rounded"
+                                className="text-[10px] uppercase tracking-widest px-2 py-1 rounded shadow-xl"
                                 style={{
                                     color: '#22d3ee',
-                                    backgroundColor: 'rgba(0,0,0,0.8)',
-                                    border: '1px solid rgba(34, 211, 238, 0.3)'
+                                    backgroundColor: 'rgba(0,0,0,0.85)',
+                                    border: '1px solid rgba(34, 211, 238, 0.4)'
                                 }}
                             >
-                                {isScanning ? '⟳ SCANNING...' : selection ? '📝 TEXT MODE' : isOnImage ? '🖼️ IMAGE DETECTED' : '○ SEARCHING'}
+                                {isScanning ? (
+                                    <div className="flex items-center gap-2 text-yellow-400">
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                        <span>INITIATING SCAN...</span>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        <div className={`w-1.5 h-1.5 rounded-full ${isOnImage ? 'bg-cyan-400 animate-pulse' : 'bg-gray-500'}`} />
+                                        <span>SYSTEM: {hoveredImage ? 'LOCKED' : 'SEARCHING'}</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -339,77 +356,104 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
                         })}
 
                         {/* Deep Analysis Sidebar Labels with Connector Lines */}
-                        {isOnImage && detectionResult?.data && (
-                            <div className="absolute left-full top-0 ml-12 flex flex-col gap-6 w-64 pointer-events-auto">
-                                <svg className="absolute right-full top-0 h-full w-12 overflow-visible pointer-events-none">
-                                    {detectionResult.data.map((det, idx) => {
-                                        if (!det.analysis) return null;
-                                        const boxCenterY = ((det.y + det.height / 2) / 100) * reticleHeight;
-                                        // Simple heuristic for label Y stacking
-                                        // In a real app we'd measure DOM elements, but for brief labels this works well
-                                        const labelY = idx * 90 + 30;
+                        {(() => {
+                            if (!isOnImage || !detectionResult?.data) return null;
 
-                                        const startX = -((100 - (det.x + det.width)) / 100) * reticleWidth;
-                                        const startY = boxCenterY;
+                            // Filter valid analysis targets to get correct label indices
+                            const analyzableDetections = detectionResult.data
+                                .filter(d => !!d.analysis);
 
-                                        return (
-                                            <g key={`line-${idx}`}>
-                                                <path
-                                                    d={`M ${startX} ${startY} L -20 ${startY} L 0 ${labelY}`}
-                                                    stroke="#22d3ee"
-                                                    strokeWidth="1"
-                                                    fill="none"
-                                                    strokeDasharray="4 2"
-                                                    className="opacity-50"
-                                                />
-                                                <circle cx={startX} cy={startY} r="2" fill="#22d3ee" />
-                                                <circle cx="0" cy={labelY} r="2" fill="#22d3ee" />
-                                            </g>
-                                        );
-                                    })}
-                                </svg>
+                            return (
+                                <>
+                                    <svg className="absolute left-full top-0 ml-0 h-[500px] w-12 overflow-visible pointer-events-none">
+                                        <AnimatePresence>
+                                            {analyzableDetections.map((det, idx) => {
+                                                const boxCenterY = ((det.y + det.height / 2) / 100) * reticleHeight;
+                                                // Each label is roughly 90px tall with 24px (gap-6) spacing
+                                                // We add 45 to point to the middle of the label
+                                                const labelCenterY = idx * (90 + 24) + 45;
 
-                                {detectionResult.data.map((det, idx) => {
-                                    if (!det.analysis) return null;
-                                    return (
-                                        <div
-                                            key={`label-${idx}`}
-                                            className="relative flex flex-col gap-1 p-3 transform transition-all duration-300 animate-in slide-in-from-left-2"
-                                            style={{
-                                                backgroundColor: 'rgba(0, 0, 0, 0.85)',
-                                                color: '#22d3ee',
-                                                border: '1px solid rgba(34, 211, 238, 0.4)',
-                                                borderLeft: '4px solid #22d3ee',
-                                                backdropFilter: 'blur(8px)',
-                                                boxShadow: '0 4px 15px rgba(0,0,0,0.5)'
-                                            }}
-                                        >
-                                            <div className="flex items-center justify-between border-b border-cyan-500/20 pb-1 mb-1 text-[10px] uppercase font-bold tracking-tighter">
-                                                <div className="flex items-center gap-2">
-                                                    <Brain className="w-3 h-3" />
-                                                    <span>{det.type} IDENTITY</span>
-                                                </div>
-                                                <span className="opacity-60">CONF: {(det.confidence * 100).toFixed(0)}%</span>
-                                            </div>
+                                                const startX = -((100 - (det.x + det.width)) / 100) * reticleWidth;
+                                                const startY = boxCenterY;
 
-                                            <div className="normal-case italic text-cyan-50 text-[11px] leading-relaxed">
-                                                {det.analysis === '...' ? (
-                                                    <div className="flex flex-col gap-2 py-1">
-                                                        <span className="flex items-center gap-2 text-[8px] uppercase tracking-tighter opacity-70">
-                                                            <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
-                                                            INITIALIZING DEEP SCAN...
-                                                        </span>
-                                                        <div className="h-1 w-full bg-cyan-950 rounded-full overflow-hidden">
-                                                            <div className="h-full bg-cyan-400 animate-progress-indefinite" />
+                                                return (
+                                                    <motion.g
+                                                        key={`line-${det.type}-${det.x}-${det.y}`}
+                                                        initial={{ opacity: 0 }}
+                                                        animate={{ opacity: 1 }}
+                                                        exit={{ opacity: 0 }}
+                                                        transition={{ duration: 0.3 }}
+                                                    >
+                                                        <motion.path
+                                                            initial={{ pathLength: 0 }}
+                                                            animate={{ pathLength: 1 }}
+                                                            d={`M ${startX} ${startY} L -20 ${startY} L 0 ${labelCenterY}`}
+                                                            stroke={det.color || "#22d3ee"}
+                                                            strokeWidth="1.5"
+                                                            fill="none"
+                                                            strokeDasharray="4 2"
+                                                            className="opacity-60"
+                                                        />
+                                                        <circle cx={startX} cy={startY} r="3" fill={det.color || "#22d3ee"} />
+                                                        <circle cx="0" cy={labelCenterY} r="3" fill={det.color || "#22d3ee"} />
+                                                    </motion.g>
+                                                );
+                                            })}
+                                        </AnimatePresence>
+                                    </svg>
+
+                                    <div className="absolute left-full top-0 ml-12 flex flex-col gap-6 w-64 pointer-events-auto">
+                                        <AnimatePresence mode="popLayout">
+                                            {analyzableDetections.map((det, idx) => (
+                                                <motion.div
+                                                    key={`label-${det.type}-${det.x}-${det.y}`}
+                                                    initial={{ opacity: 0, x: 20 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    exit={{ opacity: 0, x: 20 }}
+                                                    transition={{ duration: 0.3, delay: idx * 0.05 }}
+                                                    className="relative flex flex-col gap-1 p-3 transform"
+                                                    style={{
+                                                        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                                                        color: det.color || '#22d3ee',
+                                                        border: `1px solid ${det.color || '#22d3ee'}44`,
+                                                        borderLeft: `4px solid ${det.color || '#22d3ee'}`,
+                                                        backdropFilter: 'blur(8px)',
+                                                        boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
+                                                        minHeight: '90px'
+                                                    }}
+                                                >
+                                                    <div className="flex items-center justify-between border-b border-white/10 pb-1 mb-1 text-[10px] uppercase font-bold tracking-tighter">
+                                                        <div className="flex items-center gap-2">
+                                                            <Brain className="w-3 h-3" />
+                                                            <span>{det.type} IDENTITY</span>
                                                         </div>
+                                                        <span className="opacity-60">CONF: {(det.confidence * 100).toFixed(0)}%</span>
                                                     </div>
-                                                ) : det.analysis}
-                                            </div>
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        )}
+
+                                                    <div className="normal-case italic text-cyan-50 text-[11px] leading-relaxed">
+                                                        {det.analysis === '...' ? (
+                                                            <div className="flex flex-col gap-2 py-1">
+                                                                <span className="flex items-center gap-2 text-[8px] uppercase tracking-tighter opacity-70">
+                                                                    <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                                                                    ACQUIRING BIOMETRICS...
+                                                                </span>
+                                                                <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+                                                                    <div className="h-full bg-yellow-400 animate-progress-indefinite" />
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="animate-in fade-in slide-in-from-top-1 duration-500">
+                                                                {det.analysis}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </motion.div>
+                                            ))}
+                                        </AnimatePresence>
+                                    </div>
+                                </>
+                            );
+                        })()}
                     </div>
                 )
             })()}

@@ -24,7 +24,7 @@ const DEFAULT_SETTINGS: Settings = {
   showCrawlingLines: true,
   enableSummarization: true,
   summarizationEndpoint: "http://localhost:8001/api/summarize",
-  summarizationModel: "ibm-granite/granite-4.0-h-tiny",
+  summarizationModel: "Qwen/Qwen2.5-0.5B-Instruct",
   minSummaryChars: 40,
   toggleActivation: false,
   saveScannedImages: false,
@@ -32,15 +32,15 @@ const DEFAULT_SETTINGS: Settings = {
   deepAnalysisThreshold: 0.85,
   categoryThresholds: {
     "Humans": 0.85,
-    "Vehicles": 0.50,
-    "Animals": 0.50,
-    "Outdoors": 0.50,
-    "Accessories": 0.50,
-    "Sports": 0.50,
-    "Household": 0.50,
-    "Food": 0.50,
-    "Electronics": 0.50,
-    "Misc": 0.50
+    "Vehicles": 0.85,
+    "Animals": 0.85,
+    "Outdoors": 0.85,
+    "Accessories": 0.85,
+    "Sports": 0.85,
+    "Household": 0.85,
+    "Food": 0.85,
+    "Electronics": 0.85,
+    "Misc": 0.85
   }
 };
 
@@ -58,6 +58,12 @@ function App() {
         (result) => {
           const mergedSettings = { ...DEFAULT_SETTINGS, ...result };
           if (typeof mergedSettings.minSummaryChars !== 'number') mergedSettings.minSummaryChars = DEFAULT_SETTINGS.minSummaryChars;
+
+          // Auto-migrate from Granite to Qwen if old model is detected
+          if (mergedSettings.summarizationModel.toLowerCase().includes('granite')) {
+            mergedSettings.summarizationModel = DEFAULT_SETTINGS.summarizationModel;
+          }
+
           setSettings(mergedSettings as Settings);
           testConnection(mergedSettings.detectionEndpoint);
         }

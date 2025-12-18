@@ -52,27 +52,19 @@ async def lifespan(app: FastAPI):
         yolo_model.to(device)
         logger.info(f"YOLO11x model loaded successfully on {device}")
 
-        # Load Granite 3.1 2B instead of 4.0 Tiny. 
-        # 3.1 is a pure transformer, much faster on Windows, and uses less VRAM.
-        logger.info("Loading Granite-3.1-2b-instruct with 4-bit quantization...")
-        summarizer_model_id = 'ibm-granite/granite-3.1-2b-instruct'
-        from transformers import BitsAndBytesConfig
+        # Load Qwen2.5-0.5B-Instruct for extreme speed on RTX 4070 Super.
+        # At 0.5B params in FP16, it uses ~1.1GB VRAM and generates almost instantly.
+        logger.info("Loading Qwen2.5-0.5B-Instruct...")
+        summarizer_model_id = 'Qwen/Qwen2.5-0.5B-Instruct'
         
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_use_double_quant=True,
-        )
-
         summarizer_tokenizer = AutoTokenizer.from_pretrained(summarizer_model_id)
         summarizer_model = AutoModelForCausalLM.from_pretrained(
             summarizer_model_id,
             trust_remote_code=True,
-            quantization_config=bnb_config,
+            torch_dtype=torch.float16,
             device_map="auto"
         )
-        logger.info("Granite-3.1-2b-instruct loaded successfully")
+        logger.info("Qwen2.5-0.5B-Instruct loaded successfully")
 
         # Load Florence-2 last as it's the largest single-block model
         logger.info("Loading Florence-2-large model...")
@@ -89,7 +81,7 @@ async def lifespan(app: FastAPI):
         yield
     except Exception as e:
         logger.error(f"Failed to load models: {e}")
-        # If Granite fails, we can still run YOLO and Florence
+        # If Qwen fails, we can still run YOLO and Florence
         if yolo_model and florence_model:
             logger.warning("Continuing without summarization model")
             yield
@@ -134,10 +126,10 @@ async def get_status():
         "models": {
             "yolo": "YOLO11x",
             "vlm": "Florence-2-large" if florence_model else "none",
-            "summarizer": "Granite-3.1-2b-instruct" if summarizer_model else "none"
+            "summarizer": "Qwen2.5-0.5B-Instruct" if summarizer_model else "none"
         },
         "device": device,
-        "message": "Ultralytics YOLO, Florence-2, and Granite service ready"
+        "message": "Ultralytics YOLO, Florence-2, and Qwen service ready"
     }
 
 @app.get("/api/config/objects")
@@ -480,7 +472,7 @@ async def analyze_box(request: Dict[str, Any]):
 @app.post("/api/summarize")
 async def summarize_text(request: Dict[str, Any]):
     """
-    Summarize text using Granite-4.0-h-tiny
+    Summarize text using Qwen2.5-0.5B-Instruct
     """
     global summarizer_model, summarizer_tokenizer, current_summarize_id
     
@@ -496,9 +488,44 @@ async def summarize_text(request: Dict[str, Any]):
         current_id = current_summarize_id + 1
         current_summarize_id = current_id
 
-        # Prepare prompt for summarization
-        # Granite 3.1 Instruct works best with a clear instruction format
-        prompt = f"<|system|>\nWrite concise, user-friendly summaries for website text. Always start with 1 to 5 emojis that best represent the text as a visual micro sentiment analysis without using words. Next add a new line with separator ------ then the actual summary of the user provided text. Keep summary very short around 30 to 75 words max.<|user|>\n{text}\n<|assistant|>\n"
+        # Determine mode and category
+        mode = request.get("mode", "summarize") # 'summarize' or 'refine'
+        category = request.get("category", "Misc")
+        
+        # Prepare content based on mode
+        if mode == "refine":
+            # Specialized prompt for refining Florence-2/Vision output
+            config = {
+                "Humans": "Identify this person. Provide name or physical description.",
+                "Vehicles": "Identify manufacturer, model, and estimated year.",
+                "Animals": "Identify breed/species and notable features.",
+                "Electronics": "Identify brand and specific model.",
+                "Food": "Identify food type and ingredients.",
+                "Household": "Identify item and style/brand."
+            }
+            hint = config.get(category, f"Identify this {category.lower()}.")
+            
+            system_prompt = (
+                "You are an AI Scanner OS. Direct and cold. "
+                "Skip all preamble and thinking. Do not use phrases like 'The image shows' or 'I see'. "
+                "Output ONLY the final identification data. Maximum 20 words."
+            )
+            query = f"RAW VISION DATA: {text}\nQUERY: {hint}"
+        else:
+            # Standard website text summarization
+            system_prompt = (
+                "Write concise summaries for website text. "
+                "Skip all 'thinking' and preamble. "
+                "Start with 1-5 emojis representing sentiment then a separator '------' followed by 30-75 words."
+            )
+            query = text
+
+        # Use chat template for robust prompting
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": query}
+        ]
+        prompt = summarizer_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         
         inputs = summarizer_tokenizer(prompt, return_tensors="pt").to(summarizer_model.device)
         
