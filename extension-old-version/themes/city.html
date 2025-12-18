@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>City Theme - Image AI Hover</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Impact', 'Arial Black', sans-serif;
+            background: linear-gradient(180deg,
+                #87ceeb 0%, #4682b4 30%, #2f4f4f 70%, #1c1c1c 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 40%;
+            background: linear-gradient(90deg,
+                transparent 0%, rgba(255,255,255,0.1) 25%,
+                transparent 50%, rgba(255,255,255,0.1) 75%, transparent 100%);
+            animation: city-lights 6s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        body::after {
+            content: '';
+            position: absolute;
+            top: 15%;
+            left: 20%;
+            width: 60%;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #87ceeb, transparent);
+            animation: horizon-glow 4s ease-in-out infinite alternate;
+            pointer-events: none;
+        }
+
+        .theme-container {
+            position: relative;
+            width: 100%;
+            max-width: 380px;
+            margin: 0 auto;
+            padding: 30px;
+            background: linear-gradient(180deg,
+                rgba(135, 206, 235, 0.95) 0%,
+                rgba(70, 130, 180, 0.95) 50%,
+                rgba(47, 79, 79, 0.95) 100%);
+            border: 3px solid #4682b4;
+            border-radius: 0px;
+            box-shadow:
+                0 10px 40px rgba(0, 0, 0, 0.5),
+                inset 0 0 50px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(20px);
+            overflow: hidden;
+        }
+
+        .theme-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                linear-gradient(45deg, transparent 30%, rgba(135, 206, 235, 0.1) 50%, transparent 70%),
+                linear-gradient(-45deg, transparent 30%, rgba(70, 130, 180, 0.1) 50%, transparent 70%);
+            animation: building-shadow 8s ease-in-out infinite alternate;
+            pointer-events: none;
+        }
+
+        .theme-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 25px;
+            border-bottom: 3px solid #4682b4;
+            position: relative;
+            background: rgba(47, 79, 79, 0.3);
+            border-radius: 0px;
+        }
+
+        .theme-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #87ceeb;
+            margin: 0 0 10px 0;
+            text-shadow:
+                2px 2px 4px rgba(0,0,0,0.8),
+                0 0 15px rgba(135, 206, 235, 0.5);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            background: linear-gradient(180deg, #87ceeb 0%, #4682b4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .theme-subtitle {
+            font-size: 12px;
+            color: #b0c4de;
+            margin: 0;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: bold;
+        }
+
+        .theme-content {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        .theme-setting {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: relative;
+            background: rgba(47, 79, 79, 0.8);
+            border: 2px solid #4682b4;
+            border-radius: 0px;
+            padding: 20px;
+            box-shadow:
+                inset 0 3px 8px rgba(0,0,0,0.4),
+                0 2px 5px rgba(0,0,0,0.3);
+            margin: 15px 0;
+        }
+
+        .theme-setting::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #87ceeb, transparent);
+            animation: top-glow 3s ease-in-out infinite alternate;
+        }
+
+        .theme-label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #87ceeb;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow:
+                1px 1px 2px rgba(0,0,0,0.8),
+                0 0 5px rgba(135, 206, 235, 0.3);
+            text-align: center;
+            background: linear-gradient(90deg, #87ceeb, #4682b4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .theme-input, .theme-select {
+            padding: 15px 18px;
+            border: 2px solid #4682b4;
+            border-radius: 0px;
+            font-size: 14px;
+            font-weight: bold;
+            background: rgba(135, 206, 235, 0.9);
+            color: #2f4f4f;
+            font-family: 'Impact', 'Arial Black', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-shadow: 1px 1px 2px rgba(255,255,255,0.3);
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+
+        .theme-input:focus, .theme-select:focus {
+            outline: none;
+            border-color: #87ceeb;
+            box-shadow:
+                0 0 0 3px rgba(135, 206, 235, 0.5),
+                inset 0 2px 5px rgba(0,0,0,0.2);
+            background: rgba(135, 206, 235, 1);
+            transform: translateY(-2px);
+        }
+
+        .theme-input::placeholder {
+            color: rgba(47, 79, 79, 0.7);
+        }
+
+        .theme-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            background: rgba(47, 79, 79, 0.9);
+            border: 2px solid #4682b4;
+            border-radius: 0px;
+            padding: 25px;
+            box-shadow:
+                inset 0 4px 10px rgba(0,0,0,0.4),
+                0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .theme-option {
+            padding: 18px 15px;
+            border: 2px solid #2f4f4f;
+            border-radius: 0px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: bold;
+            background: linear-gradient(180deg, #87ceeb 0%, #4682b4 100%);
+            color: #2f4f4f;
+            font-family: 'Impact', 'Arial Black', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-shadow: 1px 1px 2px rgba(255,255,255,0.3);
+            box-shadow:
+                inset 0 2px 4px rgba(255,255,255,0.2),
+                0 3px 6px rgba(0,0,0,0.3);
+        }
+
+        .theme-option::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg,
+                transparent, rgba(255,255,255,0.4), transparent);
+            transition: left 0.6s ease;
+        }
+
+        .theme-option::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #87ceeb, transparent);
+            animation: window-glow 2s ease-in-out infinite alternate;
+        }
+
+        .theme-option:hover {
+            background: linear-gradient(180deg, #b0c4de 0%, #87ceeb 100%);
+            border-color: #87ceeb;
+            transform: translateY(-3px) scale(1.05);
+            box-shadow:
+                0 8px 15px rgba(0,0,0,0.4),
+                inset 0 2px 4px rgba(255,255,255,0.3);
+        }
+
+        .theme-option:hover::before {
+            left: 100%;
+        }
+
+        .theme-option.selected {
+            background: linear-gradient(180deg, #2f4f4f 0%, #1c1c1c 100%);
+            color: #87ceeb;
+            border-color: #87ceeb;
+            transform: translateY(-5px) scale(1.1);
+            box-shadow:
+                0 12px 20px rgba(0,0,0,0.5),
+                inset 0 0 15px rgba(135, 206, 235, 0.3);
+            text-shadow:
+                0 0 5px #87ceeb,
+                1px 1px 2px rgba(0,0,0,0.8);
+        }
+
+        .theme-buttons {
+            display: flex;
+            gap: 20px;
+            margin-top: 25px;
+        }
+
+        .theme-btn {
+            flex: 1;
+            padding: 18px 25px;
+            border: 2px solid #87ceeb;
+            border-radius: 0px;
+            font-size: 14px;
+            font-weight: bold;
+            font-family: 'Impact', 'Arial Black', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            min-height: 50px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+
+        .theme-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .theme-btn:hover::before {
+            left: 100%;
+        }
+
+        .theme-btn-primary {
+            background: linear-gradient(180deg, #4682b4 0%, #2f4f4f 100%);
+            color: #87ceeb;
+            border-color: #87ceeb;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+
+        .theme-btn-primary:hover {
+            background: linear-gradient(180deg, #87ceeb 0%, #4682b4 100%);
+            transform: translateY(-3px) scale(1.05);
+            box-shadow:
+                0 8px 15px rgba(0,0,0,0.4),
+                0 0 15px rgba(135, 206, 235, 0.3);
+        }
+
+        .theme-btn-secondary {
+            background: linear-gradient(180deg, #2f4f4f 0%, #1c1c1c 100%);
+            color: #b0c4de;
+            border-color: #4682b4;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+
+        .theme-btn-secondary:hover {
+            background: linear-gradient(180deg, #4682b4 0%, #2f4f4f 100%);
+            color: #87ceeb;
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.4);
+        }
+
+        .theme-status {
+            padding: 15px 20px;
+            border: 2px solid #4682b4;
+            border-radius: 0px;
+            font-size: 13px;
+            text-align: center;
+            font-weight: bold;
+            font-family: 'Impact', 'Arial Black', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            background: rgba(135, 206, 235, 0.9);
+            color: #2f4f4f;
+            text-shadow: 1px 1px 2px rgba(255,255,255,0.3);
+            box-shadow:
+                inset 0 2px 5px rgba(0,0,0,0.2),
+                0 3px 8px rgba(0,0,0,0.3);
+        }
+
+        .theme-status.connected {
+            background: rgba(135, 206, 235, 0.9);
+            color: #2f4f4f;
+            border-color: #4682b4;
+            box-shadow:
+                0 0 15px rgba(135, 206, 235, 0.5),
+                inset 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .theme-status.disconnected {
+            background: rgba(220, 20, 60, 0.9);
+            color: white;
+            border-color: #8b0000;
+            box-shadow:
+                0 0 15px rgba(220, 20, 60, 0.5),
+                inset 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .theme-status.testing {
+            background: rgba(255, 165, 0, 0.9);
+            color: #2f4f4f;
+            border-color: #ff8c00;
+            box-shadow:
+                0 0 15px rgba(255, 165, 0, 0.5),
+                inset 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .theme-info {
+            font-size: 12px;
+            color: #b0c4de;
+            line-height: 1.6;
+            text-align: center;
+            font-style: italic;
+            background: rgba(47, 79, 79, 0.8);
+            border-radius: 0px;
+            padding: 15px;
+            border: 1px solid #4682b4;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.3);
+        }
+
+        @keyframes city-lights {
+            0% { transform: translateX(-100%); opacity: 0.3; }
+            50% { opacity: 0.7; }
+            100% { transform: translateX(100%); opacity: 0.3; }
+        }
+
+        @keyframes horizon-glow {
+            0% { opacity: 0.3; transform: scaleX(1); }
+            100% { opacity: 0.8; transform: scaleX(1.1); }
+        }
+
+        @keyframes building-shadow {
+            0% { opacity: 0.1; transform: translateX(-10px); }
+            100% { opacity: 0.3; transform: translateX(10px); }
+        }
+
+        @keyframes top-glow {
+            0% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+
+        @keyframes window-glow {
+            0% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="theme-container">
+        <div class="theme-header">
+            <h1 class="theme-title">🏙️ METRO AI 🏙️</h1>
+            <p class="theme-subtitle">URBAN DETECTION NETWORK</p>
+        </div>
+
+        <div class="theme-content">
+            <div class="theme-setting">
+                <label class="theme-label">DISTRICT SELECT</label>
+                <select class="theme-select" id="theme-selector">
+                    <option value="default">DEFAULT</option>
+                    <option value="cyberpunk">CYBERPUNK</option>
+                    <option value="birthday">BIRTHDAY</option>
+                    <option value="city">CITY</option>
+                    <option value="underwater">UNDERWATER</option>
+                </select>
+            </div>
+
+            <div class="theme-setting">
+                <label class="theme-label">NETWORK ADDRESS</label>
+                <input type="text" class="theme-input" id="detection-endpoint"
+                       placeholder="http://localhost:8001/api/detect-base64"
+                       value="http://localhost:8001/api/detect-base64">
+            </div>
+
+            <div class="theme-setting">
+                <label class="theme-label">ACCESS PROTOCOL</label>
+                <div class="theme-grid">
+                    <div class="theme-option" data-input="keyboard:Shift">SHIFT</div>
+                    <div class="theme-option" data-input="keyboard:Control">CTRL</div>
+                    <div class="theme-option" data-input="keyboard:Alt">ALT</div>
+                    <div class="theme-option" data-input="mouse:0">CLICK</div>
+                    <div class="theme-option" data-input="mouse:1">MIDDLE</div>
+                    <div class="theme-option" data-input="mouse:2">RIGHT</div>
+                </div>
+            </div>
+
+            <div class="theme-setting">
+                <label class="theme-label">CRAWLING LINES</label>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="checkbox" id="show-crawling-lines" checked />
+                    <span>Show crawling lines</span>
+                </div>
+            </div>
+
+            <div class="theme-buttons">
+                <button class="theme-btn theme-btn-primary" id="save-btn">SAVE</button>
+                <button class="theme-btn theme-btn-secondary" id="test-btn">TEST</button>
+            </div>
+
+            <div class="theme-setting">
+                <p class="theme-info">
+                    ENGAGE SELECTED PROTOCOL OVER TARGET IMAGES<br>
+                    ENSURE NEURAL NETWORK INFRASTRUCTURE IS OPERATIONAL
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class CityTheme {
+            constructor() {
+                this.settings = {
+                    triggerInput: 'keyboard:Shift',
+                    detectionEndpoint: 'http://localhost:8001/api/detect-base64',
+                    theme: 'city',
+                    showCrawlingLines: true
+                };
+                this.init();
+            }
+
+            init() {
+                this.loadSettings();
+                this.setupEventListeners();
+                this.updateUI();
+            }
+
+            async loadSettings() {
+                try {
+                    const result = await chrome.storage.sync.get(['triggerInput', 'detectionEndpoint', 'theme', 'showCrawlingLines']);
+                    if (result.triggerInput) this.settings.triggerInput = result.triggerInput;
+                    if (result.detectionEndpoint) this.settings.detectionEndpoint = result.detectionEndpoint;
+                    if (result.theme) this.settings.theme = result.theme;
+                    if (typeof result.showCrawlingLines === 'boolean') this.settings.showCrawlingLines = result.showCrawlingLines;
+                } catch (error) {
+                    console.log('Using default city settings');
+                }
+            }
+
+            setupEventListeners() {
+                document.getElementById('save-btn').addEventListener('click', () => this.saveSettings());
+                document.getElementById('test-btn').addEventListener('click', () => this.testConnection());
+                document.getElementById('theme-selector').addEventListener('change', (e) => this.selectTheme(e.target.value));
+
+                document.querySelectorAll('.theme-option').forEach(option => {
+                    option.addEventListener('click', (e) => this.selectInput(e.target.dataset.input));
+                });
+
+                document.getElementById('detection-endpoint').addEventListener('input', (e) => {
+                    this.settings.detectionEndpoint = e.target.value;
+                });
+
+                const crawlCheckbox = document.getElementById('show-crawling-lines');
+                if (crawlCheckbox) {
+                    crawlCheckbox.addEventListener('change', (e) => {
+                        this.settings.showCrawlingLines = !!e.target.checked;
+                    });
+                }
+            }
+
+            selectInput(input) {
+                this.settings.triggerInput = input;
+                document.querySelectorAll('.theme-option').forEach(option => {
+                    option.classList.remove('selected');
+                });
+                document.querySelector(`[data-input="${input}"]`).classList.add('selected');
+            }
+
+            selectTheme(theme) {
+                this.settings.theme = theme;
+                // Theme switching logic
+            }
+
+            updateUI() {
+                document.getElementById('detection-endpoint').value = this.settings.detectionEndpoint;
+                document.getElementById('theme-selector').value = this.settings.theme;
+                this.selectInput(this.settings.triggerInput);
+                const crawlCheckbox = document.getElementById('show-crawling-lines');
+                if (crawlCheckbox) crawlCheckbox.checked = !!this.settings.showCrawlingLines;
+            }
+
+            async saveSettings() {
+                try {
+                    await chrome.storage.sync.set({
+                        triggerInput: this.settings.triggerInput,
+                        detectionEndpoint: this.settings.detectionEndpoint,
+                        theme: this.settings.theme,
+                        showCrawlingLines: this.settings.showCrawlingLines
+                    });
+                    this.showStatus('CONFIGURATION STORED', 'connected');
+                } catch (error) {
+                    this.showStatus('STORAGE ERROR', 'disconnected');
+                }
+            }
+
+            async testConnection() {
+                this.showStatus('TESTING NETWORK...', 'testing');
+                try {
+                    const response = await fetch(this.settings.detectionEndpoint.replace('/api/detect-base64', '/api/status'));
+                    if (response.ok) {
+                        this.showStatus('CONNECTION ESTABLISHED', 'connected');
+                    } else {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                } catch (error) {
+                    this.showStatus('NETWORK UNAVAILABLE', 'disconnected');
+                }
+            }
+
+            showStatus(message, type) {
+                const statusEl = document.getElementById('status');
+                statusEl.textContent = message;
+                statusEl.className = `theme-status ${type}`;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            new CityTheme();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Image AI Hover",
+  "version": "1.337.3",
+  "description": "AI-powered image detection with configurable keyboard or mouse activation. Shows detection results in a floating popup that follows your cursor.",
+  "permissions": ["activeTab", "storage", "downloads"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["image-scan.js", "content.js", "hovering.js"],
+      "css": ["overlay.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Image AI Hover"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["overlay.html", "overlay.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "16": "icons/ai-scan-thingy.png",
+    "48": "icons/ai-scan-thingy.png",
+    "128": "icons/ai-scan-thingy.png"
+  }
+}
