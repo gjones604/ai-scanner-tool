@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { imageScanner, type DetectionResult } from '../services/imageScanner'
-import { type SummarySettings, /*textSummarizer*/ } from '../services/textSummarizer'
+import { type SummarySettings, textSummarizer } from '../services/textSummarizer'
 
 export function useScanner(
     isActive: boolean,
     saveScannedImages: boolean = false,
     enableDeepAnalysis: boolean = false,
+    enableEnhancedDescription: boolean = true,
     deepAnalysisThreshold: number = 0.85,
     categoryThresholds: Record<string, number> = {},
     summarySettings?: SummarySettings
@@ -94,16 +95,17 @@ export function useScanner(
 
                 let finalAnalysis = visionResult
 
-                /*
                 // Step 2: Use the unified summarizer to refine the output (The "Brain" step)
-                if (visionResult && !visionResult.startsWith('Error')) {
+                const isAnalyzable = (target as any).is_analyzable
+                if (enableEnhancedDescription && isAnalyzable && visionResult && !visionResult.startsWith('Error') && summarySettings) {
                     try {
                         const refinedResult = await textSummarizer.summarize(
                             visionResult,
                             {
                                 ...summarySettings,
                                 mode: 'refine',
-                                category: (target as any).category || 'Misc'
+                                category: (target as any).category || 'Misc',
+                                type: target.type
                             } as any
                         )
 
@@ -114,7 +116,6 @@ export function useScanner(
                         console.error("Refinement failed", err)
                     }
                 }
-                */
 
                 setDetectionResult(prev => {
                     if (!prev) return prev

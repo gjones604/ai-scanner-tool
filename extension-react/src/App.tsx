@@ -14,6 +14,7 @@ interface Settings {
   toggleActivation: boolean;
   saveScannedImages: boolean;
   enableDeepAnalysis: boolean;
+  enableEnhancedDescription: boolean;
   deepAnalysisThreshold: number;
   categoryThresholds: Record<string, number>;
 }
@@ -29,6 +30,7 @@ const DEFAULT_SETTINGS: Settings = {
   toggleActivation: false,
   saveScannedImages: false,
   enableDeepAnalysis: false,
+  enableEnhancedDescription: true,
   deepAnalysisThreshold: 0.85,
   categoryThresholds: {
     "Humans": 0.85,
@@ -221,6 +223,17 @@ function App() {
               onChange={(e) => handleChange('saveScannedImages', e.target.checked)}
             />
             Save scanned images to server
+          </label>
+        </div>
+
+        <div className="theme-setting">
+          <label className="theme-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={settings.enableEnhancedDescription}
+              onChange={(e) => handleChange('enableEnhancedDescription', e.target.checked)}
+            />
+            Enhanced Image Description (LLM Refinement)
           </label>
         </div>
 

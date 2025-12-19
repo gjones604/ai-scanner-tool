@@ -24,11 +24,21 @@ export default {
             animation: {
                 'scanline': 'scanline 2s linear infinite',
                 'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                'progress-indefinite': 'progress-indefinite 1.5s ease-in-out infinite',
+                'ping-pong': 'ping-pong 1s ease-in-out infinite',
             },
             keyframes: {
                 scanline: {
                     '0%': { transform: 'translateY(-100%)' },
                     '100%': { transform: 'translateY(100vh)' },
+                },
+                'progress-indefinite': {
+                    '0%': { transform: 'translateX(-100%)' },
+                    '100%': { transform: 'translateX(100%)' },
+                },
+                'ping-pong': {
+                    '0%, 100%': { transform: 'translateX(0)' },
+                    '50%': { transform: 'translateX(10px)' },
                 }
             }
         },

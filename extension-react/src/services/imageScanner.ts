@@ -77,7 +77,7 @@ export class ImageScannerService {
         this.isProcessing = true
 
         try {
-            const base64 = await this.imageToBase64(img)
+            const base64 = await this.imageToBase64(img, save)
             let result: DetectionResult | null = null
 
             if (base64) {
@@ -183,7 +183,7 @@ export class ImageScannerService {
      * Convert image to base64 using the already-loaded DOM element.
      * This uses the browser's cache - NO re-download from server.
      */
-    private imageToBase64(img: HTMLImageElement | Element): Promise<string | null> {
+    private imageToBase64(img: HTMLImageElement | Element, save: boolean = false): Promise<string | null> {
         return new Promise((resolve) => {
             try {
                 // If it's an HTMLImageElement, draw it directly to canvas
@@ -206,7 +206,7 @@ export class ImageScannerService {
                     }
 
                     // If tainted canvas (CORS), try capturing visible tab and cropping
-                    this.captureAndCrop(img).then(resolve)
+                    this.captureAndCrop(img, save).then(resolve)
                     return
                 }
 
@@ -262,7 +262,7 @@ export class ImageScannerService {
      * Fallback: Capture the current tab's viewport and crop the image from it.
      * This bypasses CORS restrictions/tainted canvas by using the visible pixels.
      */
-    private async captureAndCrop(img: Element): Promise<string | null> {
+    private async captureAndCrop(img: Element, save: boolean = false): Promise<string | null> {
         try {
             const rect = img.getBoundingClientRect()
             if (rect.width === 0 || rect.height === 0) return null
@@ -270,17 +270,26 @@ export class ImageScannerService {
             // Check if chrome runtime is available
             if (typeof chrome === 'undefined' || !chrome.runtime) return null
 
-            // Hide only the reticle follower if present to avoid dirtying the screenshot
+            // Hide UI elements if we are actually saving the image to disk
+            // This prevents the reticle and HUD from dirtying the resulting file
             const reticle = document.getElementById('scanner-reticle')
-            if (reticle) reticle.style.display = 'none'
+            const hud = document.getElementById('ai-scanner-hud-container')
+
+            if (save) {
+                if (reticle) reticle.style.display = 'none'
+                if (hud) hud.style.display = 'none'
+            }
 
             let response: any;
             try {
                 // Send message to background to capture tab
                 response = await chrome.runtime.sendMessage({ type: "CAPTURE_VISIBLE_TAB" })
             } finally {
-                // Restore reticle visibility
-                if (reticle) reticle.style.display = 'block'
+                // Restore visibility
+                if (save) {
+                    if (reticle) reticle.style.display = 'block'
+                    if (hud) hud.style.display = 'block'
+                }
             }
 
             if (!response || !response.dataUrl) return null
@@ -293,8 +302,8 @@ export class ImageScannerService {
                     // captureVisibleTab returns the full physical pixels image
                     const scale = image.width / window.innerWidth
 
-                    // We can output at high res or logical size. 
-                    // Let's output at logical size (rect size) * dpr approx? 
+                    // We can output at high res or logical size.
+                    // Let's output at logical size (rect size) * dpr approx?
                     // Or just use the scale we found to get maximum quality.
                     canvas.width = rect.width * scale
                     canvas.height = rect.height * scale

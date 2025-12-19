@@ -488,37 +488,51 @@ async def summarize_text(request: Dict[str, Any]):
         current_id = current_summarize_id + 1
         current_summarize_id = current_id
 
-        # Determine mode and category
+        # Determine mode, category and type
         mode = request.get("mode", "summarize") # 'summarize' or 'refine'
         category = request.get("category", "Misc")
+        obj_type = request.get("type")
+        
+        # Base system prompt for Qwen - Neutral and performance-oriented
+        system_prompt = request.get("system_prompt") or (
+            "You are the AI Scanner OS. Direct, cold, and factual. "
+            "Skip all 'thinking' and preamble. Do not use phrases like 'The image shows' or 'Here is a summary'. "
+            "Output only the final analytical data."
+        )
         
         # Prepare content based on mode
         if mode == "refine":
-            # Specialized prompt for refining Florence-2/Vision output
-            config = {
-                "Humans": "Identify this person. Provide name or physical description.",
-                "Vehicles": "Identify manufacturer, model, and estimated year.",
-                "Animals": "Identify breed/species and notable features.",
-                "Electronics": "Identify brand and specific model.",
-                "Food": "Identify food type and ingredients.",
-                "Household": "Identify item and style/brand."
-            }
-            hint = config.get(category, f"Identify this {category.lower()}.")
+            # Get class-specific prompt from OBJECT_CONFIG if available
+            obj_config = OBJECT_CONFIG.get(obj_type, {}) if obj_type else {}
+            hint = obj_config.get("llm_query") or obj_config.get("prompt")
             
-            system_prompt = (
-                "You are an AI Scanner OS. Direct and cold. "
-                "Skip all preamble and thinking. Do not use phrases like 'The image shows' or 'I see'. "
-                "Output ONLY the final identification data. Maximum 20 words."
+            if not hint:
+                # Specialized prompt for refining Florence-2/Vision output
+                fallback_config = {
+                    "Humans": "Identify this person. Provide name or physical description.",
+                    "Vehicles": "Identify manufacturer, model, and estimated year.",
+                    "Animals": "Identify breed/species and notable features.",
+                    "Electronics": "Identify brand and specific model.",
+                    "Food": "Identify food type and ingredients.",
+                    "Household": "Identify item and style/brand."
+                }
+                hint = fallback_config.get(category, f"Identify this {category.lower()}.")
+            
+            query = (
+                f"RAW VISION DATA: {text}\n"
+                f"IDENTIFICATION QUERY: {hint}\n\n"
+                "TASK: Perform high-certainty identification. Output ONLY the identification data. "
+                "Maximum 20 words."
             )
-            query = f"RAW VISION DATA: {text}\nQUERY: {hint}"
         else:
             # Standard website text summarization
-            system_prompt = (
-                "Write concise summaries for website text. "
-                "Skip all 'thinking' and preamble. "
-                "Start with 1-5 emojis representing sentiment then a separator '------' followed by 30-75 words."
+            query = (
+                f"SOURCE TEXT: {text}\n\n"
+                "TASK: Summarize the text with the following structure:\n"
+                "1. Start with 1 to 5 emojis representing sentiment (no words allowed here only emojis).\n"
+                "2. Next add a new line with separator '------'.\n"
+                "3. Finally write the 30-100 word summary about the SOURCE TEXT."
             )
-            query = text
 
         # Use chat template for robust prompting
         messages = [

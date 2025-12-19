@@ -80,8 +80,9 @@ class TextSummarizer {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
+                    ...settings,
                     text: truncated,
-                    system_prompt: settings.systemPrompt
+                    endpoint: undefined // Don't send endpoint to itself
                 }),
                 signal,
             })

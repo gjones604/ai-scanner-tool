@@ -22,6 +22,7 @@ interface Settings {
     toggleActivation: boolean
     saveScannedImages: boolean
     enableDeepAnalysis: boolean
+    enableEnhancedDescription: boolean
     deepAnalysisThreshold: number
     categoryThresholds: Record<string, number>
 }
@@ -37,6 +38,7 @@ const DEFAULT_SETTINGS: Settings = {
     toggleActivation: false,
     saveScannedImages: false,
     enableDeepAnalysis: false,
+    enableEnhancedDescription: true,
     deepAnalysisThreshold: 0.85,
     categoryThresholds: {
         "Humans": 0.85,
@@ -54,6 +56,8 @@ const DEFAULT_SETTINGS: Settings = {
 
 const ScannerHUD: React.FC<ScannerHUDProps> = () => {
     const [isActive, setIsActive] = useState(false)
+    const [isMouseDown, setIsMouseDown] = useState(false)
+    const [isHoveringText, setIsHoveringText] = useState(false)
     const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
     const summarySettings: SummarySettings = {
         endpoint: settings.summarizationEndpoint,
@@ -65,6 +69,7 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
         isActive,
         settings.saveScannedImages,
         settings.enableDeepAnalysis,
+        settings.enableEnhancedDescription,
         settings.deepAnalysisThreshold,
         settings.categoryThresholds,
         summarySettings
@@ -76,6 +81,11 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
         isSummarizing,
         error: summaryError,
     } = useTextSummarization(isActive && settings.enableSummarization, summarySettings)
+
+    const systemStatus = isSummarizing ? 'SUMMARIZING' :
+        (isMouseDown && !hoveredImage) ? 'SELECTING' :
+            hoveredImage ? 'SCANNING' :
+                isHoveringText ? 'TEXT' : 'IDLE'
 
     // Load settings from chrome storage and listen for changes
     useEffect(() => {
@@ -197,6 +207,29 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
         }
     }, []) // Empty deps - handlers use ref for fresh settings
 
+    useEffect(() => {
+        const onMouseDown = () => setIsMouseDown(true)
+        const onMouseUp = () => setIsMouseDown(false)
+        const onMouseMove = (e: MouseEvent) => {
+            const el = document.elementFromPoint(e.clientX, e.clientY)
+            if (el) {
+                const style = window.getComputedStyle(el)
+                setIsHoveringText(style.cursor === 'text')
+            } else {
+                setIsHoveringText(false)
+            }
+        }
+
+        window.addEventListener('mousedown', onMouseDown)
+        window.addEventListener('mouseup', onMouseUp)
+        window.addEventListener('mousemove', onMouseMove)
+        return () => {
+            window.removeEventListener('mousedown', onMouseDown)
+            window.removeEventListener('mouseup', onMouseUp)
+            window.removeEventListener('mousemove', onMouseMove)
+        }
+    }, [])
+
     if (!isActive) return null
 
     return (
@@ -312,8 +345,8 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
                                     </div>
                                 ) : (
                                     <div className="flex items-center gap-2">
-                                        <div className={`w-1.5 h-1.5 rounded-full ${isOnImage ? 'bg-cyan-400 animate-pulse' : 'bg-gray-500'}`} />
-                                        <span>SYSTEM: {hoveredImage ? 'LOCKED' : 'SEARCHING'}</span>
+                                        <div className={`w-1.5 h-1.5 rounded-full ${systemStatus !== 'IDLE' ? 'bg-cyan-400 animate-ping-pong' : 'bg-gray-500'}`} />
+                                        <span>SYSTEM: {systemStatus}</span>
                                     </div>
                                 )}
                             </div>
@@ -359,22 +392,30 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
                         {(() => {
                             if (!isOnImage || !detectionResult?.data) return null;
 
-                            // Filter valid analysis targets to get correct label indices
+                            // Filter valid analysis targets and sort by Y position to prevent line crossing
                             const analyzableDetections = detectionResult.data
-                                .filter(d => !!d.analysis);
+                                .filter(d => !!d.analysis)
+                                .sort((a, b) => a.y - b.y);
 
                             return (
                                 <>
-                                    <svg className="absolute left-full top-0 ml-0 h-[500px] w-12 overflow-visible pointer-events-none">
+                                    <svg className="absolute left-full top-0 ml-0 h-full w-12 overflow-visible pointer-events-none">
                                         <AnimatePresence>
                                             {analyzableDetections.map((det, idx) => {
                                                 const boxCenterY = ((det.y + det.height / 2) / 100) * reticleHeight;
+                                                const boxRightEdgeX = ((det.x + det.width) / 100) * reticleWidth;
+
                                                 // Each label is roughly 90px tall with 24px (gap-6) spacing
-                                                // We add 45 to point to the middle of the label
                                                 const labelCenterY = idx * (90 + 24) + 45;
 
-                                                const startX = -((100 - (det.x + det.width)) / 100) * reticleWidth;
+                                                // SVG origin is at the right edge of the reticle
+                                                // startX is relative to that origin (so it's negative)
+                                                const startX = boxRightEdgeX - reticleWidth;
                                                 const startY = boxCenterY;
+
+                                                // End at the start of the sidebar (48px gap from SVG origin)
+                                                const endX = 48;
+                                                const endY = labelCenterY;
 
                                                 return (
                                                     <motion.g
@@ -387,15 +428,15 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
                                                         <motion.path
                                                             initial={{ pathLength: 0 }}
                                                             animate={{ pathLength: 1 }}
-                                                            d={`M ${startX} ${startY} L -20 ${startY} L 0 ${labelCenterY}`}
+                                                            d={`M ${startX} ${startY} L ${endX} ${endY}`}
                                                             stroke={det.color || "#22d3ee"}
                                                             strokeWidth="1.5"
                                                             fill="none"
                                                             strokeDasharray="4 2"
-                                                            className="opacity-60"
+                                                            className="opacity-80"
                                                         />
                                                         <circle cx={startX} cy={startY} r="3" fill={det.color || "#22d3ee"} />
-                                                        <circle cx="0" cy={labelCenterY} r="3" fill={det.color || "#22d3ee"} />
+                                                        <circle cx={endX} cy={endY} r="3" fill={det.color || "#22d3ee"} />
                                                     </motion.g>
                                                 );
                                             })}
@@ -434,11 +475,11 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
                                                         {det.analysis === '...' ? (
                                                             <div className="flex flex-col gap-2 py-1">
                                                                 <span className="flex items-center gap-2 text-[8px] uppercase tracking-tighter opacity-70">
-                                                                    <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                                                                    <span className="w-2 h-2 bg-yellow-400 rounded-full animate-ping-pong" />
                                                                     ACQUIRING BIOMETRICS...
                                                                 </span>
-                                                                <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
-                                                                    <div className="h-full bg-yellow-400 animate-progress-indefinite" />
+                                                                <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden relative">
+                                                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-yellow-400 to-transparent w-2/3 animate-progress-indefinite" />
                                                                 </div>
                                                             </div>
                                                         ) : (
@@ -472,7 +513,7 @@ const ScannerHUD: React.FC<ScannerHUDProps> = () => {
             {/* Bottom Status Bar */}
             <div className="absolute bottom-0 left-0 right-0 h-12 bg-black/80 flex items-center justify-between px-8 text-xs border-t border-cyan-900/50">
                 <div className="font-mono">
-                    COORDS: {mousePos.x.toFixed(0)} : {mousePos.y.toFixed(0)} | REF: {hoveredImage ? 'LOCKED' : selection ? 'TEXT' : 'SEARCHING'}
+                    COORDS: {mousePos.x.toFixed(0)} : {mousePos.y.toFixed(0)} | REF: {systemStatus}
                 </div>
                 <div className="flex items-center space-x-2">
                     <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
